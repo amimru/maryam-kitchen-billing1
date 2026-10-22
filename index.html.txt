@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maryam's Kitchen - Billing Software</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
+    .container { max-width: 800px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin: auto; }
+    h2 { text-align: center; color: #1a2a3a; margin-bottom: 5px; }
+    .subtitle { text-align: center; font-size: 13px; color: #666; margin-bottom: 20px; }
+    .status-bar { padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 15px; font-weight: bold; }
+    .online { background: #d4edda; color: #155724; }
+    .offline { background: #f8d7da; color: #721c24; }
+    .form-group { display: flex; gap: 10px; margin-bottom: 12px; }
+    .form-group input, .form-group select { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+    button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #218838; }
+    
+    @media print {
+      body { background: white; margin: 0; }
+      .no-print { display: none; }
+      .container { box-shadow: none; width: 100%; border: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div id="status" class="status-bar online no-print">Online — Cloud Sync Enabled</div>
+  
+  <h2>MARYAM'S KITCHEN</h2>
+  <div class="subtitle">#175/9, Mancholai, Kinniya-03 | +94 77 977 8728</div>
+
+  <form id="billingForm">
+    <h3>Customer Details</h3>
+    <div class="form-group">
+      <input type="text" id="customerName" placeholder="Customer Name" required>
+      <input type="text" id="customerContact" placeholder="Contact No (+94...)" required>
+    </div>
+
+    <h3>Invoice Details</h3>
+    <div class="form-group">
+      <input type="text" id="invoiceNo" placeholder="Invoice No (e.g., PP/MK/027)" required>
+      <input type="date" id="invoiceDate" required>
+    </div>
+
+    <h3>Item Details</h3>
+    <div class="form-group">
+      <input type="text" id="itemName" placeholder="Item Name (e.g., MULTIGRAIN PLUS)" required>
+      <input type="number" id="qty" placeholder="Qty" min="1" required oninput="calculateTotal()">
+      <input type="number" id="rate" placeholder="Rate (LKR)" required oninput="calculateTotal()">
+    </div>
+
+    <div class="form-group">
+      <input type="text" id="netTotal" placeholder="Net Total (LKR)" readonly>
+      <select id="paymentMethod">
+        <option value="Cash / Cheque">Cash / Cheque</option>
+        <option value="Bank Transfer">Bank Transfer</option>
+      </select>
+    </div>
+
+    <button type="button" class="no-print" onclick="saveAndPrintInvoice()">Save & Print Invoice</button>
+  </form>
+</div>
+
+<script>
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxEdEJlskghsMKc7kvuO2DpClaDNU4lZoqzI-yavo9dJIaobSk9KYWjvF69FS7FC89UGQ/exec";
+
+  function updateStatus() {
+    const statusEl = document.getElementById('status');
+    if (navigator.onLine) {
+      statusEl.className = "status-bar online no-print";
+      statusEl.innerText = "Online — Cloud Sync Enabled";
+      syncOfflineInvoices();
+    } else {
+      statusEl.className = "status-bar offline no-print";
+      statusEl.innerText = "Offline Mode — Data saved locally on mobile/PC";
+    }
+  }
+
+  window.addEventListener('online', updateStatus);
+  window.addEventListener('offline', updateStatus);
+  updateStatus();
+
+  function calculateTotal() {
+    const qty = parseFloat(document.getElementById('qty').value) || 0;
+    const rate = parseFloat(document.getElementById('rate').value) || 0;
+    document.getElementById('netTotal').value = (qty * rate).toFixed(2);
+  }
+
+  function saveAndPrintInvoice() {
+    const invoice = {
+      invoiceNo: document.getElementById('invoiceNo').value,
+      invoiceDate: document.getElementById('invoiceDate').value,
+      customerName: document.getElementById('customerName').value,
+      customerContact: document.getElementById('customerContact').value,
+      itemName: document.getElementById('itemName').value,
+      qty: document.getElementById('qty').value,
+      rate: document.getElementById('rate').value,
+      netTotal: document.getElementById('netTotal').value,
+      paymentMethod: document.getElementById('paymentMethod').value,
+      salesperson: "AMI"
+    };
+
+    if (!invoice.invoiceNo || !invoice.customerName) {
+      alert("Please fill in the required fields.");
+      return;
+    }
+
+    if (navigator.onLine) {
+      sendToGoogleDrive(invoice);
+    } else {
+      let pending = JSON.parse(localStorage.getItem('pendingInvoices') || "[]");
+      pending.push(invoice);
+      localStorage.setItem('pendingInvoices', JSON.stringify(pending));
+      alert("Invoice saved offline. It will sync to Google Sheets when internet connects.");
+    }
+
+    window.print();
+  }
+
+  function sendToGoogleDrive(data) {
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    }).then(() => console.log("Synced with Google Drive"))
+      .catch(err => console.error("Sync failed:", err));
+  }
+
+  function syncOfflineInvoices() {
+    let pending = JSON.parse(localStorage.getItem('pendingInvoices') || "[]");
+    if (pending.length > 0) {
+      pending.forEach(inv => sendToGoogleDrive(inv));
+      localStorage.removeItem('pendingInvoices');
+      console.log("All offline invoices synced to Google Drive.");
+    }
+  }
+</script>
+</body>
+</html>
